@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="zh-TW">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>迷宮探索遊戲</title>
+  <script src="/_sdk/element_sdk.js"></script>
+  <style>
+    body {
+      box-sizing: border-box;
+    }
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    html, body {
+      height: 100%;
+      width: 100%;
+    }
+    
+    .game-wrapper {
+      height: 100%;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      font-family: 'Arial', 'Microsoft YaHei', sans-serif;
+      overflow: auto;
+    }
+    
+    .game-header {
+      padding: 20px;
+      text-align: center;
+    }
+    
+    .game-title {
+      font-size: 32px;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+    
+    .game-controls {
+      font-size: 14px;
+      opacity: 0.8;
+    }
+    
+    .game-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      min-height: 0;
+    }
+    
+    .maze-canvas {
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+      max-width: 100%;
+      max-height: 100%;
+    }
+    
+    .victory-message {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      padding: 40px 60px;
+      border-radius: 16px;
+      text-align: center;
+      font-size: 36px;
+      font-weight: bold;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      display: none;
+      z-index: 1000;
+      animation: popIn 0.5s ease-out;
+    }
+    
+    @keyframes popIn {
+      0% {
+        transform: translate(-50%, -50%) scale(0.5);
+        opacity: 0;
+      }
+      100% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1;
+      }
+    }
+    
+    .reset-button {
+      margin-top: 20px;
+      padding: 12px 32px;
+      font-size: 18px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: transform 0.2s;
+    }
+    
+    .reset-button:hover {
+      transform: scale(1.05);
+    }
+    
+    .reset-button:active {
+      transform: scale(0.95);
+    }
+  </style>
+  <style>@view-transition { navigation: auto; }</style>
+  <script src="/_sdk/data_sdk.js" type="text/javascript"></script>
+  <script src="https://cdn.tailwindcss.com" type="text/javascript"></script>
+ </head>
+ <body>
+  <div class="game-wrapper">
+   <div class="game-header">
+    <h1 class="game-title" id="gameTitle">迷宮探索</h1>
+    <p class="game-controls" id="gameControls">使用方向鍵 ↑ ↓ ← → 移動角色</p>
+   </div>
+   <div class="game-container">
+    <canvas id="mazeCanvas" class="maze-canvas"></canvas>
+   </div>
+   <div class="victory-message" id="victoryMessage">
+    🎉 恭喜通關！🎉 <br><button class="reset-button" id="resetButton">再玩一次</button>
+   </div>
+  </div>
+  <script>
+    const defaultConfig = {
+      background_color: "#2C3E50",
+      maze_wall_color: "#34495E",
+      maze_path_color: "#ECF0F1",
+      player_color: "#E74C3C",
+      end_color: "#F39C12",
+      game_title: "迷宮探索",
+      start_text: "起點",
+      end_text: "終點",
+      controls_text: "使用方向鍵 ↑ ↓ ← → 移動角色"
+    };
+
+    const canvas = document.getElementById('mazeCanvas');
+    const ctx = canvas.getContext('2d');
+    const victoryMessage = document.getElementById('victoryMessage');
+    const resetButton = document.getElementById('resetButton');
+
+    // 迷宮設計 (0 = 路徑, 1 = 牆壁)
+    const maze = [
+      [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+      [1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1],
+      [1, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 1],
+      [1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1],
+      [1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1],
+      [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+      [1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1],
+      [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1],
+      [1, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1],
+      [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+      [1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1],
+      [1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1],
+      [1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1],
+      [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+      [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+    ];
+
+    const cellSize = 40;
+    const mazeWidth = maze[0].length;
+    const mazeHeight = maze.length;
+    
+    canvas.width = mazeWidth * cellSize;
+    canvas.height = mazeHeight * cellSize;
+
+    let player = { x: 1, y: 1 };
+    const end = { x: 13, y: 13 };
+    let gameWon = false;
+
+    function drawMaze() {
+      const config = window.elementSdk ? window.elementSdk.config : defaultConfig;
+      
+      for (let row = 0; row < mazeHeight; row++) {
+        for (let col = 0; col < mazeWidth; col++) {
+          if (maze[row][col] === 1) {
+            ctx.fillStyle = config.maze_wall_color || defaultConfig.maze_wall_color;
+          } else {
+            ctx.fillStyle = config.maze_path_color || defaultConfig.maze_path_color;
+          }
+          ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
+          ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
+          ctx.strokeRect(col * cellSize, row * cellSize, cellSize, cellSize);
+        }
+      }
+    }
+
+    function drawPlayer() {
+      const config = window.elementSdk ? window.elementSdk.config : defaultConfig;
+      const centerX = player.x * cellSize + cellSize / 2;
+      const centerY = player.y * cellSize + cellSize / 2;
+      
+      ctx.fillStyle = config.player_color || defaultConfig.player_color;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, cellSize * 0.35, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.fillStyle = 'white';
+      ctx.beginPath();
+      ctx.arc(centerX - 4, centerY - 4, 3, 0, Math.PI * 2);
+      ctx.arc(centerX + 4, centerY - 4, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawEnd() {
+      const config = window.elementSdk ? window.elementSdk.config : defaultConfig;
+      const centerX = end.x * cellSize + cellSize / 2;
+      const centerY = end.y * cellSize + cellSize / 2;
+      
+      // 發光效果
+      const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, cellSize * 0.6);
+      gradient.addColorStop(0, config.end_color || defaultConfig.end_color);
+      gradient.addColorStop(1, 'rgba(243, 156, 18, 0.2)');
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, cellSize * 0.5, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // 旗子圖示
+      ctx.fillStyle = config.end_color || defaultConfig.end_color;
+      ctx.fillRect(centerX - 2, centerY - 12, 4, 20);
+      ctx.beginPath();
+      ctx.moveTo(centerX + 2, centerY - 10);
+      ctx.lineTo(centerX + 12, centerY - 6);
+      ctx.lineTo(centerX + 2, centerY - 2);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function drawGame() {
+      drawMaze();
+      drawEnd();
+      drawPlayer();
+    }
+
+    function canMove(x, y) {
+      if (x < 0 || x >= mazeWidth || y < 0 || y >= mazeHeight) return false;
+      return maze[y][x] === 0;
+    }
+
+    function movePlayer(dx, dy) {
+      if (gameWon) return;
+      
+      const newX = player.x + dx;
+      const newY = player.y + dy;
+      
+      if (canMove(newX, newY)) {
+        player.x = newX;
+        player.y = newY;
+        drawGame();
+        
+        if (player.x === end.x && player.y === end.y) {
+          gameWon = true;
+          setTimeout(() => {
+            victoryMessage.style.display = 'block';
+          }, 300);
+        }
+      }
+    }
+
+    function resetGame() {
+      player = { x: 1, y: 1 };
+      gameWon = false;
+      victoryMessage.style.display = 'none';
+      drawGame();
+    }
+
+    document.addEventListener('keydown', (e) => {
+      switch(e.key) {
+        case 'ArrowUp':
+          e.preventDefault();
+          movePlayer(0, -1);
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          movePlayer(0, 1);
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          movePlayer(-1, 0);
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          movePlayer(1, 0);
+          break;
+      }
+    });
+
+    resetButton.addEventListener('click', resetGame);
+
+    async function onConfigChange(config) {
+      const gameWrapper = document.querySelector('.game-wrapper');
+      const gameHeader = document.querySelector('.game-header');
+      const gameTitle = document.getElementById('gameTitle');
+      const gameControls = document.getElementById('gameControls');
+      const resetBtn = document.querySelector('.reset-button');
+      const victoryMsg = document.getElementById('victoryMessage');
+      
+      gameWrapper.style.backgroundColor = config.background_color || defaultConfig.background_color;
+      gameHeader.style.color = config.maze_path_color || defaultConfig.maze_path_color;
+      gameTitle.textContent = config.game_title || defaultConfig.game_title;
+      gameControls.textContent = config.controls_text || defaultConfig.controls_text;
+      
+      victoryMsg.style.backgroundColor = config.end_color || defaultConfig.end_color;
+      victoryMsg.style.color = config.maze_path_color || defaultConfig.maze_path_color;
+      
+      resetBtn.style.backgroundColor = config.player_color || defaultConfig.player_color;
+      resetBtn.style.color = config.maze_path_color || defaultConfig.maze_path_color;
+      
+      drawGame();
+    }
+
+    if (window.elementSdk) {
+      window.elementSdk.init({
+        defaultConfig,
+        onConfigChange,
+        mapToCapabilities: (config) => ({
+          recolorables: [
+            {
+              get: () => config.background_color || defaultConfig.background_color,
+              set: (value) => {
+                config.background_color = value;
+                window.elementSdk.setConfig({ background_color: value });
+              }
+            },
+            {
+              get: () => config.maze_path_color || defaultConfig.maze_path_color,
+              set: (value) => {
+                config.maze_path_color = value;
+                window.elementSdk.setConfig({ maze_path_color: value });
+              }
+            },
+            {
+              get: () => config.maze_wall_color || defaultConfig.maze_wall_color,
+              set: (value) => {
+                config.maze_wall_color = value;
+                window.elementSdk.setConfig({ maze_wall_color: value });
+              }
+            },
+            {
+              get: () => config.player_color || defaultConfig.player_color,
+              set: (value) => {
+                config.player_color = value;
+                window.elementSdk.setConfig({ player_color: value });
+              }
+            },
+            {
+              get: () => config.end_color || defaultConfig.end_color,
+              set: (value) => {
+                config.end_color = value;
+                window.elementSdk.setConfig({ end_color: value });
+              }
+            }
+          ],
+          borderables: [],
+          fontEditable: undefined,
+          fontSizeable: undefined
+        }),
+        mapToEditPanelValues: (config) => new Map([
+          ["game_title", config.game_title || defaultConfig.game_title],
+          ["start_text", config.start_text || defaultConfig.start_text],
+          ["end_text", config.end_text || defaultConfig.end_text],
+          ["controls_text", config.controls_text || defaultConfig.controls_text]
+        ])
+      });
+    }
+
+    drawGame();
+  </script>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9aeaf888750d6a98',t:'MTc2NTg1NDQ1MC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
